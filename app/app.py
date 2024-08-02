@@ -226,10 +226,11 @@ class TokenData(schemas.BaseModel):
     username: str | None = None
 
 class USER(schemas.BaseModel):
-    username: str
-    email: str | None = None
-    full_name: str | None = None
-    disabled: bool | None = None
+    id: int
+    sub: str
+    nam: str | None = None
+    pic: str | None = None
+    disabled: bool = False
 
 class UserInDB(USER):
     hashed_passwd: str
@@ -270,21 +271,26 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
     try:
         payload = jwt.decode(token, jwt_secret, algorithms=['HS256'])
         username: str = payload.get("sub")
-        if username is None:
+        ''' 
+        if payload.get("disabled"):
             raise credentials_exception
+        '''
         token_data = TokenData(username=username)
     except Exception:
         raise credentials_exception
     user = get_user(username=token_data.username)
     if user is None:
         raise credentials_exception
-    return user
+    payload['nam'] = payload['name']
+    return dict(payload)
 
 async def get_current_active_user(
     current_user: Annotated[USER, Depends(get_current_user)],
 ):
+    '''
     if not current_user:
         raise HTTPException(status_code=400, detail="Inactive user")
+    '''
     return current_user
 
 @api.post("/token")
@@ -300,7 +306,7 @@ async def login_for_access_token(
         )
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires
+        data={"id": user.id, "sub": user.username, "pic": user.avatar, "name": user.first_name + ' ' + user.last_name}, expires_delta=access_token_expires
     )
     return Token(access_token=access_token, token_type="bearer")
 
@@ -442,5 +448,5 @@ api.mount("/static", StaticFiles(directory="./app/static"), name="static")
 
 
 if __name__ == "__main__":
-    __import__('uvicorn').run('app:api', host="0.0.0.0", port=8888, reload=True)
+    __import__('uvicorn').run('app:api', host="0.0.0.0", port=8888, reload=False)
 
