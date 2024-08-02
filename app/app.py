@@ -13,14 +13,17 @@ from .database import secret as jwt_secret
 from . import crud, models
 import requests
 from jose import jwt
+from os import environ as env
+from dotenv import load_dotenv
 
 
+load_dotenv()
 # Initialize database.
 init_db()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-GOOGLE_CLIENT_ID = "620173221441-14ubnd1861mcf25lpa4ncogpcse1c202.apps.googleusercontent.com"
-GOOGLE_CLIENT_SECRET = "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"
-GOOGLE_REDIRECT_URI = "http://localhost:8888/"
+GOOGLE_CLIENT_ID = env.get('GOOGLE_CLIENT_ID')
+GOOGLE_CLIENT_SECRET = env.get('GOOGLE_CLIENT_SECRET')
+GOOGLE_REDIRECT_URI = env.get('GOOGLE_REDIRECT_URI')
 
 
 description = """
