@@ -14,6 +14,7 @@ from .database import secret as jwt_secret
 from . import crud, models, schemas
 import requests
 from jose import jwt
+from jose.exceptions import JWTError
 from os import environ as env
 from dotenv import load_dotenv
 from datetime import datetime, timedelta, timezone
@@ -276,7 +277,7 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
             raise credentials_exception
         '''
         token_data = TokenData(username=username)
-    except Exception:
+    except JWTError:
         raise credentials_exception
     user = get_user(username=token_data.username)
     if user is None:
@@ -293,7 +294,7 @@ async def get_current_active_user(
     '''
     return current_user
 
-@api.post("/token")
+@api.post("/token", tags=['others'])
 async def login_for_access_token(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
 ) -> Token:
@@ -311,18 +312,11 @@ async def login_for_access_token(
     return Token(access_token=access_token, token_type="bearer")
 
 
-@api.get("/users/me/", response_model=USER)
+@api.get("/me", response_model=USER, include_in_schema=False)
 async def read_users_me(
     current_user: Annotated[USER, Depends(get_current_active_user)],
 ):
     return current_user
-
-
-@api.get("/users/me/items/")
-async def read_own_items(
-    current_user: Annotated[USER, Depends(get_current_active_user)],
-):
-    return [{"item_id": "Foo", "owner": current_user.username}]
 
 
 # Include routers
@@ -439,9 +433,12 @@ async def auth_google(code: str = '', dob: str = '', phone: str = '', addr: str 
     return {'token': token}
 
 
-@api.get("/token")
-async def get_token(token: str = Depends(oauth2_scheme)):
-    return jwt.decode(token, GOOGLE_CLIENT_SECRET, algorithms=["HS256"])
+@api.get("/token", tags=['others'])
+async def decode_token(token: str = Depends(oauth2_scheme)):
+    try:
+        return jwt.decode(token, GOOGLE_CLIENT_SECRET, algorithms=["HS256"])
+    except JWTError:
+        return HTTPException(status_code=401, detail="Invalid token supplied.")
 
 
 api.mount("/static", StaticFiles(directory="./app/static"), name="static")
