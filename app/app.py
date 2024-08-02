@@ -326,7 +326,7 @@ async def auth_google(code: str = '', db: Session = Depends(get_db)):
         token = jwt.encode(payload, jwt_secret, algorithm='HS256')
         return {'token': token}
     else:
-        raise HTTPException(requests.status_code=422, detail="No email supplied / provided in data.")
+        raise HTTPException(status_code=422, detail="No email supplied / provided in data.")
 
 
 @api.get("/token")
