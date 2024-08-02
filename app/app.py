@@ -340,8 +340,8 @@ api.include_router(labs.router, prefix="/labs", tags=["labs"])
 
 @api.get("/", include_in_schema=False)
 def redirect_docs(code: str = '', scope: str = '', authuser: int = 0, prompt: str = ''):
-    print(code, scope, authuser, prompt)
     if code:
+        print(code, scope, authuser, prompt)
         phone, dob, addr = '+977 9847078791', '2011-11-11', 'Somewhere near your heart.'
         # TODO: DoNot-Hardcode [phone, dob, addr] like vars above.
         return RedirectResponse(f'/auth/google?code={code}&dob={dob}&phone={phone}&addr={addr}')
