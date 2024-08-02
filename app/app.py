@@ -1,17 +1,26 @@
 #!/usr/bin/env python3
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
+from fastapi.security import OAuth2PasswordBearer
 from fastapi.openapi.utils import get_openapi
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse, FileResponse
 from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
+from sqlalchemy.orm import Session
 from .routers import users, medications, appointments, procedures, reminders, notifications, contacts, allergies, medical_conditions, labs
-from .database import engine, init_db
-from . import models
+from .database import init_db, get_db  # , engine
+from .database import secret as jwt_secret
+from . import crud, models
+import requests
+from jose import jwt
 
 
 # Initialize database.
 init_db()
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+GOOGLE_CLIENT_ID = "620173221441-14ubnd1861mcf25lpa4ncogpcse1c202.apps.googleusercontent.com"
+GOOGLE_CLIENT_SECRET = "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"
+GOOGLE_REDIRECT_URI = "http://localhost:8888/"
 
 
 description = """
@@ -216,7 +225,11 @@ api.include_router(labs.router, prefix="/labs", tags=["labs"])
 
 
 @api.get("/", include_in_schema=False)
-def redirect_docs():
+def redirect_docs(code: str = '', scope: str = '', authuser: int = 0, prompt: str = ''):
+    print(code, scope, authuser, prompt)
+    if code:
+        # TODO: Take input for: dob, phone_number, address here; then make a connected redirection to endpoint below:
+        return RedirectResponse(f'/auth/google?code={code}')
     return RedirectResponse(url="/docs/")
 
 
@@ -250,6 +263,68 @@ def overridden_redoc():
 @api.get("/ping")
 def pong():
     return {"ping": "pong!"}
+
+@api.get("/login/google")
+async def login_google():
+    return RedirectResponse(f"https://accounts.google.com/o/oauth2/auth?response_type=code&client_id={GOOGLE_CLIENT_ID}&redirect_uri={GOOGLE_REDIRECT_URI}&scope=openid%20profile%20email&access_type=offline")
+
+@api.get("/auth/google")
+async def auth_google(code: str = '', db: Session = Depends(get_db)):
+    if not code:
+        return RedirectResponse('/login/google')
+    token_url = "https://accounts.google.com/o/oauth2/token"
+    data = {
+        "code": code,
+        "client_id": GOOGLE_CLIENT_ID,
+        "client_secret": GOOGLE_CLIENT_SECRET,
+        "redirect_uri": GOOGLE_REDIRECT_URI,
+        "grant_type": "authorization_code",
+    }
+    response = requests.post(token_url, data=data)
+    access_token = response.json().get("access_token")
+    user_info = requests.get("https://www.googleapis.com/oauth2/v1/userinfo", headers={"Authorization": f"Bearer {access_token}"})
+    data = user_info.json()
+    data['code'] = code
+    # Check if user's email address is already registered.
+    db_user = crud.get_user_by_email(db, email=data['email'])
+    if db_user is None:
+         dob = "2024-08-02"
+         phone_number = "string"
+         address = "string"
+         secret = f"oauth_{data['id']}:{data['code']}"
+         updated_at = '2024-08-02T17:08:26.475Z'
+         created_at = '2024-08-02T17:08:26.475Z'
+         username = data['email'].split('@')[0]
+         db_user = models.User(
+             email=data['email'],
+             secret=secret,
+             username=username,
+             first_name=data['given_name'],
+             last_name=data['family_name'],
+             dob=dob,
+             avatar=data['picture'],
+             phone_number=phone_number,
+             address=address,
+             created_at=created_at,
+             updated_at=updated_at
+         )
+         db.add(db_user)
+         db.commit()
+         db.refresh(db_user)
+         db_user = crud.get_user_by_email(db, email=data['email'])
+    payload = {
+        'id': db_user.id,
+        'username': db_user.username,
+        'email': data['email'],
+        'avatar': data['picture'],
+        'name': db_user.first_name + ' ' + db_user.last_name
+    }
+    token = jwt.encode(payload, jwt_secret, algorithm='HS256')
+    return {'token': token}
+
+@api.get("/token")
+async def get_token(token: str = Depends(oauth2_scheme)):
+    return jwt.decode(token, GOOGLE_CLIENT_SECRET, algorithms=["HS256"])
 
 
 api.mount("/static", StaticFiles(directory="./app/static"), name="static")
