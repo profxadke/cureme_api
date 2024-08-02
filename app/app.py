@@ -15,6 +15,7 @@ import requests
 from jose import jwt
 from os import environ as env
 from dotenv import load_dotenv
+from datetime import datetime
 
 
 load_dotenv()
@@ -231,8 +232,9 @@ api.include_router(labs.router, prefix="/labs", tags=["labs"])
 def redirect_docs(code: str = '', scope: str = '', authuser: int = 0, prompt: str = ''):
     print(code, scope, authuser, prompt)
     if code:
-        # TODO: Take input for: dob, phone_number, address here; then make a connected redirection to endpoint below:
-        return RedirectResponse(f'/auth/google?code={code}')
+        phone, dob, addr = '+977 9847078791', '11/11/2011', 'Somewhere near your heart.'
+        # TODO: DoNot-Hardcode [phone, dob, addr] like vars above.
+        return RedirectResponse(f'/auth/google?code={code}&dob={dob}&phone={phone}&add={addr}')
     return RedirectResponse(url="/docs/")
 
 
@@ -272,7 +274,7 @@ async def login_google():
     return RedirectResponse(f"https://accounts.google.com/o/oauth2/auth?response_type=code&client_id={GOOGLE_CLIENT_ID}&redirect_uri={GOOGLE_REDIRECT_URI}&scope=openid%20profile%20email&access_type=offline")
 
 @api.get("/auth/google")
-async def auth_google(code: str = '', db: Session = Depends(get_db)):
+async def auth_google(code: str = '', dob: str = '', phone: str = '', addr: str = '', db: Session = Depends(get_db)):
     if not code:
         return RedirectResponse('/login/google')
     token_url = "https://accounts.google.com/o/oauth2/token"
@@ -288,45 +290,44 @@ async def auth_google(code: str = '', db: Session = Depends(get_db)):
     user_info = requests.get("https://www.googleapis.com/oauth2/v1/userinfo", headers={"Authorization": f"Bearer {access_token}"})
     data = user_info.json()
     data['code'] = code
-    if 'email' in data:
-        # Check if user's email address is already registered.
-        db_user = crud.get_user_by_email(db, email=data['email'])
-        if db_user is None:
-             dob = "2024-08-02"
-             phone_number = "string"
-             address = "string"
-             secret = f"oauth_{data['id']}:{data['code']}"
-             updated_at = '2024-08-02T17:08:26.475Z'
-             created_at = '2024-08-02T17:08:26.475Z'
-             username = data['email'].split('@')[0]
-             db_user = models.User(
-                 email=data['email'],
-                 secret=secret,
-                 username=username,
-                 first_name=data['given_name'],
-                 last_name=data['family_name'],
-                 dob=dob,
-                 avatar=data['picture'],
-                 phone_number=phone_number,
-                 address=address,
-                 created_at=created_at,
-                 updated_at=updated_at
-             )
-             db.add(db_user)
-             db.commit()
-             db.refresh(db_user)
-             db_user = crud.get_user_by_email(db, email=data['email'])
-        payload = {
-            'id': db_user.id,
-            'username': db_user.username,
-            'email': data['email'],
-            'avatar': data['picture'],
-            'name': db_user.first_name + ' ' + db_user.last_name
-        }
-        token = jwt.encode(payload, jwt_secret, algorithm='HS256')
-        return {'token': token}
-    else:
+    if 'email' not in data:
         raise HTTPException(status_code=422, detail="No email supplied / provided in data.")
+    # Check if user's email address is already registered.
+    db_user = crud.get_user_by_email(db, email=data['email'])
+    if db_user is None:
+         dob = "2024-08-02"
+         phone_number = phone
+         address = addr
+         secret = f"oauth_{data['id']}:{data['code']}"
+         updated_at = str(datetime.now()).replace(' ', 'T')[:23] + 'Z'
+         created_at = updated_at
+         username = data['email'].split('@')[0]
+         db_user = models.User(
+             email=data['email'],
+             secret=secret,
+             username=username,
+             first_name=data['given_name'],
+             last_name=data['family_name'],
+             dob=dob,
+             avatar=data['picture'],
+             phone_number=phone_number,
+             address=address,
+             created_at=created_at,
+             updated_at=updated_at
+         )
+         db.add(db_user)
+         db.commit()
+         db.refresh(db_user)
+         db_user = crud.get_user_by_email(db, email=data['email'])
+    payload = {
+        'id': db_user.id,
+        'username': db_user.username,
+        'email': data['email'],
+        'avatar': data['picture'],
+        'name': db_user.first_name + ' ' + db_user.last_name
+    }
+    token = jwt.encode(payload, jwt_secret, algorithm='HS256')
+    return {'token': token}
 
 
 @api.get("/token")
