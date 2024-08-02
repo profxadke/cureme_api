@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.openapi.utils import get_openapi
 from fastapi.staticfiles import StaticFiles
@@ -288,42 +288,46 @@ async def auth_google(code: str = '', db: Session = Depends(get_db)):
     user_info = requests.get("https://www.googleapis.com/oauth2/v1/userinfo", headers={"Authorization": f"Bearer {access_token}"})
     data = user_info.json()
     data['code'] = code
-    # Check if user's email address is already registered.
-    db_user = crud.get_user_by_email(db, email=data['email'])
-    if db_user is None:
-         dob = "2024-08-02"
-         phone_number = "string"
-         address = "string"
-         secret = f"oauth_{data['id']}:{data['code']}"
-         updated_at = '2024-08-02T17:08:26.475Z'
-         created_at = '2024-08-02T17:08:26.475Z'
-         username = data['email'].split('@')[0]
-         db_user = models.User(
-             email=data['email'],
-             secret=secret,
-             username=username,
-             first_name=data['given_name'],
-             last_name=data['family_name'],
-             dob=dob,
-             avatar=data['picture'],
-             phone_number=phone_number,
-             address=address,
-             created_at=created_at,
-             updated_at=updated_at
-         )
-         db.add(db_user)
-         db.commit()
-         db.refresh(db_user)
-         db_user = crud.get_user_by_email(db, email=data['email'])
-    payload = {
-        'id': db_user.id,
-        'username': db_user.username,
-        'email': data['email'],
-        'avatar': data['picture'],
-        'name': db_user.first_name + ' ' + db_user.last_name
-    }
-    token = jwt.encode(payload, jwt_secret, algorithm='HS256')
-    return {'token': token}
+    if 'email' in data:
+        # Check if user's email address is already registered.
+        db_user = crud.get_user_by_email(db, email=data['email'])
+        if db_user is None:
+             dob = "2024-08-02"
+             phone_number = "string"
+             address = "string"
+             secret = f"oauth_{data['id']}:{data['code']}"
+             updated_at = '2024-08-02T17:08:26.475Z'
+             created_at = '2024-08-02T17:08:26.475Z'
+             username = data['email'].split('@')[0]
+             db_user = models.User(
+                 email=data['email'],
+                 secret=secret,
+                 username=username,
+                 first_name=data['given_name'],
+                 last_name=data['family_name'],
+                 dob=dob,
+                 avatar=data['picture'],
+                 phone_number=phone_number,
+                 address=address,
+                 created_at=created_at,
+                 updated_at=updated_at
+             )
+             db.add(db_user)
+             db.commit()
+             db.refresh(db_user)
+             db_user = crud.get_user_by_email(db, email=data['email'])
+        payload = {
+            'id': db_user.id,
+            'username': db_user.username,
+            'email': data['email'],
+            'avatar': data['picture'],
+            'name': db_user.first_name + ' ' + db_user.last_name
+        }
+        token = jwt.encode(payload, jwt_secret, algorithm='HS256')
+        return {'token': token}
+    else:
+        raise HTTPException(requests.status_code=422, detail="No email supplied / provided in data.")
+
 
 @api.get("/token")
 async def get_token(token: str = Depends(oauth2_scheme)):
