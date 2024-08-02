@@ -232,9 +232,9 @@ api.include_router(labs.router, prefix="/labs", tags=["labs"])
 def redirect_docs(code: str = '', scope: str = '', authuser: int = 0, prompt: str = ''):
     print(code, scope, authuser, prompt)
     if code:
-        phone, dob, addr = '+977 9847078791', '11/11/2011', 'Somewhere near your heart.'
+        phone, dob, addr = '+977 9847078791', '2011-11-11', 'Somewhere near your heart.'
         # TODO: DoNot-Hardcode [phone, dob, addr] like vars above.
-        return RedirectResponse(f'/auth/google?code={code}&dob={dob}&phone={phone}&add={addr}')
+        return RedirectResponse(f'/auth/google?code={code}&dob={dob}&phone={phone}&addr={addr}')
     return RedirectResponse(url="/docs/")
 
 
@@ -295,7 +295,6 @@ async def auth_google(code: str = '', dob: str = '', phone: str = '', addr: str 
     # Check if user's email address is already registered.
     db_user = crud.get_user_by_email(db, email=data['email'])
     if db_user is None:
-         dob = "2024-08-02"
          phone_number = phone
          address = addr
          secret = f"oauth_{data['id']}:{data['code']}"
