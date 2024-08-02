@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.openapi.utils import get_openapi
 from fastapi.staticfiles import StaticFiles
@@ -8,19 +9,21 @@ from fastapi.responses import RedirectResponse, FileResponse
 from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
 from sqlalchemy.orm import Session
 from .routers import users, medications, appointments, procedures, reminders, notifications, contacts, allergies, medical_conditions, labs
-from .database import init_db, get_db  # , engine
+from .database import init_db, get_db, SessionLocal, digest  # , engine
 from .database import secret as jwt_secret
-from . import crud, models
+from . import crud, models, schemas
 import requests
 from jose import jwt
 from os import environ as env
 from dotenv import load_dotenv
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+from typing import Annotated
 
 
 load_dotenv()
 # Initialize database.
 init_db()
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 GOOGLE_CLIENT_ID = env.get('GOOGLE_CLIENT_ID')
 GOOGLE_CLIENT_SECRET = env.get('GOOGLE_CLIENT_SECRET')
@@ -215,6 +218,107 @@ def custom_openapi():
 api.openapi = custom_openapi
 
 
+class Token(schemas.BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(schemas.BaseModel):
+    username: str | None = None
+
+class USER(schemas.BaseModel):
+    username: str
+    email: str | None = None
+    full_name: str | None = None
+    disabled: bool | None = None
+
+class UserInDB(USER):
+    hashed_passwd: str
+
+def verify_password(plain_password, hashed_password):
+    if digest(plain_password) == hashed_password:
+        return True
+
+def get_password_hash(password: str):
+    return digest(password)
+
+def get_user(username: str):
+    return crud.get_user_by_email(db=SessionLocal(), email=username)
+
+def authenticate_user(username: str, password: str):
+    db_user = get_user(username)
+    if not db_user:
+        return False
+    if verify_password(password, db_user.secret):
+        return db_user
+
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, jwt_secret, algorithm='HS256')
+    return encoded_jwt
+
+async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, jwt_secret, algorithms=['HS256'])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+        token_data = TokenData(username=username)
+    except Exception:
+        raise credentials_exception
+    user = get_user(username=token_data.username)
+    if user is None:
+        raise credentials_exception
+    return user
+
+async def get_current_active_user(
+    current_user: Annotated[USER, Depends(get_current_user)],
+):
+    if not current_user:
+        raise HTTPException(status_code=400, detail="Inactive user")
+    return current_user
+
+@api.post("/token")
+async def login_for_access_token(
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+) -> Token:
+    user = authenticate_user(form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.username}, expires_delta=access_token_expires
+    )
+    return Token(access_token=access_token, token_type="bearer")
+
+
+@api.get("/users/me/", response_model=USER)
+async def read_users_me(
+    current_user: Annotated[USER, Depends(get_current_active_user)],
+):
+    return current_user
+
+
+@api.get("/users/me/items/")
+async def read_own_items(
+    current_user: Annotated[USER, Depends(get_current_active_user)],
+):
+    return [{"item_id": "Foo", "owner": current_user.username}]
+
+
 # Include routers
 api.include_router(users.router, prefix="/users", tags=["users"])
 api.include_router(medications.router, prefix="/medications", tags=["medications"])
@@ -300,7 +404,7 @@ async def auth_google(code: str = '', dob: str = '', phone: str = '', addr: str 
          secret = f"oauth_{data['id']}:{data['code']}"
          updated_at = str(datetime.now()).replace(' ', 'T')[:23] + 'Z'
          created_at = updated_at
-         username = data['email'].split('@')[0]
+         username = data['email']
          db_user = models.User(
              email=data['email'],
              secret=secret,
