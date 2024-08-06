@@ -49,78 +49,7 @@ You will be able to:
 </h3>
 """
 
-"""
-# Medications
 
-You will be able to:
-
-* **Create medications**
-* **Read medications**
-* **Read medication**
-* **Update medication**
-* **Delete medication**
-
-# Appointments
-
-You will be able to:
-
-* **Create appointments**
-* **Read appointments**
-* **Read appointment**
-* **Update appointment**
-* **Delete appointment**
-
-# Reminders
-
-You will be able to:
-
-* **Create reminders**
-* **Read reminders**
-* **Read reminder**
-* **Update reminder**
-* **Delete reminder**
-
-# Notifications
-
-You will be able to:
-
-* **Create notifications**
-* **Read notifications**
-* **Read notification**
-* **Update notification**
-* **Delete notification**
-
-# Contacts
-
-You will be able to:
-
-* **Create contacts**
-* **Read contacts**
-* **Read contact**
-* **Update contact**
-* **Delete contact**
-
-# Procedures
-
-You will be able to:
-
-* **Create procedures**
-* **Read procedures**
-* **Read procedure**
-* **Update procedure**
-* **Delete procedure**
-
-# Allergies
-
-You will be able to:
-
-* **Create allergies**
-* **Read allergies**
-* **Read allergy**
-* **Update allergy**
-* **Delete allergy**
-
-"""
 tags_metadata = [
     {
         "name": "users",
@@ -174,7 +103,7 @@ tags_metadata = [
     title="CureMe API",
     description=description,
     summary='CureMe Medical App\'s REST API.',
-    version="0.0.1",
+    version="0.0.2",
     terms_of_service="#",
     contact={
         "name": "profxadke",
@@ -278,10 +207,6 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
     try:
         payload = jwt.decode(token, jwt_secret, algorithms=['HS256'])
         username: str = payload.get("sub")
-        ''' 
-        if payload.get("disabled"):
-            raise credentials_exception
-        '''
         token_data = TokenData(username=username)
     except JWTError:
         raise credentials_exception
@@ -294,10 +219,6 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
 async def get_current_active_user(
     current_user: Annotated[USER, Depends(get_current_user)],
 ):
-    '''
-    if not current_user:
-        raise HTTPException(status_code=400, detail="Inactive user")
-    '''
     return current_user
 
 @api.post("/token", tags=['others'])
@@ -346,13 +267,6 @@ def redirect_docs(code: str = '', scope: str = '', authuser: int = 0, prompt: st
         # TODO: DoNot-Hardcode [phone, dob, addr] like vars above.
         return RedirectResponse(f'/auth/google?code={code}&dob={dob}&phone={phone}&addr={addr}')
     return RedirectResponse(url="/docs/")
-
-
-'''
-@api.get("/docs", include_in_schema=False)
-def redirect_redoc():
-    return RedirectResponse(url="/redoc/")
-'''
 
 
 @api.get("/favicon.ico", include_in_schema=False)
@@ -452,4 +366,3 @@ api.mount("/static", StaticFiles(directory="./app/static"), name="static")
 
 if __name__ == "__main__":
     __import__('uvicorn').run('app:api', host="0.0.0.0", port=8888, reload=False)
-
