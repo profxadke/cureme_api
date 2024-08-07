@@ -6,9 +6,10 @@ from fastapi.security import OAuth2PasswordBearer
 from fastapi.openapi.utils import get_openapi
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse, FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
 from sqlalchemy.orm import Session
-from .routers import users, medications, appointments, procedures, reminders, notifications, contacts, allergies, medical_conditions, labs
+from .routers import users, medications, appointments, procedures, reminders, notifications, contacts, allergies, medical_conditions, labs, vaccines
 from .database import init_db, get_db, SessionLocal, digest  # , engine
 from .database import secret as jwt_secret
 from . import crud, models, schemas
@@ -22,6 +23,7 @@ from typing import Annotated
 
 
 load_dotenv()
+origins = ["*"]
 # Initialize database.
 init_db()
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
@@ -92,6 +94,10 @@ tags_metadata = [
         "description": "Labs operations with users.",
     },
     {
+        "name": "vaccines",
+        "description": "Labs operations with vaccines.",
+    },
+    {
         "name": "others",
         "description": "Manage others. So _fancy_ they have their own docs.",
         "externalDocs": {
@@ -116,6 +122,13 @@ tags_metadata = [
     },
     openapi_tags=tags_metadata,
     docs_url=None, redoc_url=None
+); app = api
+api.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -252,6 +265,7 @@ api.include_router(medications.router, prefix="/medications", tags=["medications
 api.include_router(appointments.router, prefix="/appointments", tags=["appointments"])
 api.include_router(reminders.router, prefix="/reminders", tags=["reminders"])
 api.include_router(notifications.router, prefix="/notifications", tags=["notifications"])
+api.include_router(vaccines.router, prefix="/vaccines", tags=["vaccines"])
 api.include_router(contacts.router, prefix="/contacts", tags=["contacts"])
 api.include_router(procedures.router, prefix="/procedures", tags=["procedures"])
 api.include_router(allergies.router, prefix="/allergies", tags=["allergies"])
